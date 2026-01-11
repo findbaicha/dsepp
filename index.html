@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HKDSE Past Paper 資源庫</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.06); }
+        .breadcrumb-item:after { content: '>'; margin: 0 10px; color: #94a3b8; font-size: 0.8rem; }
+        .breadcrumb-item:last-child:after { content: ''; }
+        
+        /* 反饋模态框 */
+        .feedback-modal { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px); }
+        .slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        /* 成功消息動畫 */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-[#f8fafc] min-h-screen pb-20">
+    <div id="app" class="max-w-5xl mx-auto px-4 py-8">
+        <!-- 頂部欄 -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div class="mb-4 md:mb-0">
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight">DSE Resource Hub</h1>
+                <p class="text-slate-400 text-sm mt-1 font-medium">Untrammeled's Past Paper Library</p>
+            </div>
+            <div class="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4">
+                <span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-block w-fit">Public Archive</span>
+                <button @click="showFeedbackForm" 
+                        class="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md flex items-center justify-center">
+                    <i class="fas fa-comment-medical mr-2"></i>
+                    報告缺失試卷
+                </button>
+            </div>
+        </header>
+
+        <!-- 麵包屑導航 -->
+        <nav class="flex items-center mb-6 px-2 overflow-x-auto whitespace-nowrap pb-2">
+            <button @click="goHome" class="flex items-center text-blue-600 hover:text-blue-800 transition flex-shrink-0">
+                <i class="fas fa-home mr-2"></i>
+                <span class="font-bold">Home</span>
+            </button>
+            <div v-for="(crumb, index) in breadcrumbs" :key="index" class="breadcrumb-item flex items-center flex-shrink-0">
+                <button @click="jumpTo(index)" class="text-slate-500 hover:text-blue-600 font-medium transition">{{ crumb }}</button>
+            </div>
+        </nav>
+
+        <!-- 主內容區域 -->
+        <div v-if="Object.keys(currentMenu).length > (currentMenu._files ? 1 : 0)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div v-for="(value, key) in currentMenu" v-show="key !== '_files'" 
+                 @click="enterDir(key)"
+                 class="card-hover cursor-pointer bg-white p-6 rounded-2xl border border-slate-100 flex items-center justify-between transition-all group">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-slate-50 group-hover:bg-blue-50 text-slate-400 group-hover:text-blue-500 rounded-xl flex items-center justify-center transition-colors">
+                        <i v-if="key === 'hkedb file'" class="fas fa-external-link-alt text-xl"></i>
+                        <i v-else class="fas fa-folder text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="font-bold text-slate-700 text-lg block leading-tight">{{ key }}</span>
+                        <span v-if="key === 'hkedb file'" class="text-blue-500 text-xs mt-1">點擊跳轉到外部資源</span>
+                        <span v-else class="text-slate-400 text-xs mt-1">點擊查看項目</span>
+                    </div>
+                </div>
+                <i v-if="key === 'hkedb file'" class="fas fa-arrow-up-right-from-square text-blue-400 group-hover:text-blue-600 transition-colors"></i>
+                <i v-else class="fas fa-arrow-right text-slate-200 group-hover:text-blue-300 transition-colors"></i>
+            </div>
+        </div>
+
+        <!-- 文件列表 -->
+        <div v-if="currentMenu._files" class="mt-8">
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                    <span class="font-bold text-slate-500 uppercase text-xs tracking-widest">可用PDF文檔</span>
+                    <span class="text-slate-400 text-xs">{{ currentMenu._files.length }} 個文件</span>
+                </div>
+                <div class="divide-y divide-slate-50">
+                    <div v-for="file in currentMenu._files"
+                       class="flex items-center justify-between p-5 hover:bg-blue-50/50 group transition-all">
+                        <div class="flex items-center pr-4 flex-grow">
+                            <div class="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 rounded-lg mr-4 group-hover:scale-110 transition-transform">
+                                <i class="fas fa-file-pdf text-lg"></i>
+                            </div>
+                            <div>
+                                <span class="text-slate-700 group-hover:text-blue-700 font-semibold block transition-colors">
+                                    {{ formatFileName(file) }}
+                                </span>
+                                <span class="text-slate-400 text-xs">PDF 文檔</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <!-- 查看按鈕 -->
+                            <button @click="openPdf(file)"
+                                    class="text-blue-500 hover:text-white hover:bg-blue-600 font-bold text-xs bg-white px-4 py-2 rounded-full border border-slate-100 shadow-sm transition-all flex items-center">
+                                <i class="fas fa-external-link-alt mr-2"></i>
+                                查看
+                            </button>
+                            <!-- 下載按鈕 -->
+                            <button @click="downloadPdf(file)"
+                                    class="text-blue-500 hover:text-white hover:bg-blue-600 font-bold text-xs bg-white px-4 py-2 rounded-full border border-slate-100 shadow-sm transition-all flex items-center">
+                                <i class="fas fa-download mr-2"></i>
+                                下載
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 空文件夾提示 -->
+        <div v-if="Object.keys(currentMenu).length === 0" class="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+            <i class="fas fa-inbox text-slate-200 text-5xl mb-4"></i>
+            <p class="text-slate-400">此文件夾為空。</p>
+        </div>
+
+        <!-- 反饋表格模态框 -->
+        <div v-if="showFeedback" class="feedback-modal fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto slide-up">
+                <!-- 頭部 -->
+                <div class="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800">📝 報告缺失試卷</h3>
+                        <p class="text-slate-500 text-sm mt-1">幫助我們完善資源庫</p>
+                    </div>
+                    <button @click="closeFeedbackForm" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors">
+                        <i class="fas fa-times text-slate-400"></i>
+                    </button>
+                </div>
+
+                <!-- 表單內容 -->
+                <div class="p-6 space-y-6">
+                    <!-- 科目選擇 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">
+                            科目 <span class="text-red-500">*</span>
+                        </label>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <button v-for="subject in ['Chinese', 'English', 'Math', 'LS', 'Phy', 'Chem', 'Bio', 'Econ', 'Geog', 'Hist', 'BAFS', 'ICT']"
+                                    :key="subject"
+                                    @click="feedback.subject = subject"
+                                    :class="feedback.subject === subject 
+                                            ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'"
+                                    class="border rounded-lg py-3 px-4 text-sm font-medium transition-all text-center">
+                                {{ subject }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 年份選擇 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">
+                            年份 <span class="text-red-500">*</span>
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            <button v-for="year in [2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014, 2013, 2012, 'PP', 'SP']"
+                                    :key="year"
+                                    @click="feedback.year = year"
+                                    :class="feedback.year === year 
+                                            ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'"
+                                    class="border rounded-lg py-2 px-4 text-sm font-medium transition-all">
+                                    {{ year }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 試卷部分選擇 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">
+                            缺失的試卷部分 <span class="text-red-500">*</span>
+                        </label>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <div v-for="paper in ['Paper 1', 'Paper 2', 'Paper 3', 'Paper 4', 'Paper 5', 'Answer Key', 'Marking Scheme']"
+                                 :key="paper"
+                                 class="flex items-center">
+                                <input :id="'paper-' + paper" 
+                                       type="checkbox" 
+                                       :value="paper"
+                                       v-model="feedback.missingPapers"
+                                       class="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500">
+                                <label :for="'paper-' + paper" class="ml-2 text-slate-700 text-sm">
+                                    {{ paper }}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 語言版本 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">
+                            語言版本
+                        </label>
+                        <div class="flex gap-4">
+                            <label class="inline-flex items-center">
+                                <input type="radio" v-model="feedback.language" value="中文版" class="h-4 w-4 text-blue-600">
+                                <span class="ml-2 text-slate-700 text-sm">中文版</span>
+                            </label>
+                            <label class="inline-flex items-center">
+                                <input type="radio" v-model="feedback.language" value="英文版" class="h-4 w-4 text-blue-600">
+                                <span class="ml-2 text-slate-700 text-sm">英文版</span>
+                            </label>
+                            <label class="inline-flex items-center">
+                                <input type="radio" v-model="feedback.language" value="both" class="h-4 w-4 text-blue-600">
+                                <span class="ml-2 text-slate-700 text-sm">兩者皆有</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 額外說明 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">
+                            詳細說明
+                        </label>
+                        <textarea v-model="feedback.description" 
+                                  placeholder="請提供更多細節，例如：具體缺失的內容、文件格式建議等..."
+                                  class="w-full h-32 px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"></textarea>
+                    </div>
+
+                    <!-- 聯繫方式 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">
+                            聯繫方式（可選）
+                        </label>
+                        <input type="email" v-model="feedback.contact" 
+                               placeholder="email@example.com"
+                               class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                        <p class="text-slate-400 text-xs mt-1">僅用於必要時聯繫您，不會公開顯示</p>
+                    </div>
+
+                    <!-- 提交按鈕 -->
+                    <div class="pt-4 border-t border-slate-100">
+                        <div class="flex justify-between items-center">
+                            <button @click="submitFeedback" 
+                                    :disabled="!canSubmit"
+                                    :class="canSubmit 
+                                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600' 
+                                            : 'bg-slate-300 cursor-not-allowed'"
+                                    class="text-white px-8 py-3 rounded-xl font-bold transition-all shadow-sm hover:shadow-md flex items-center">
+                                <i class="fas fa-paper-plane mr-2"></i>
+                                提交報告
+                            </button>
+                            <button @click="resetForm" class="text-slate-500 hover:text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors">
+                                重設表單
+                            </button>
+                        </div>
+                        <p class="text-slate-400 text-xs mt-4 text-center">
+                            提交後將跳轉到 GitHub 創建反饋 Issue，您的貢獻將幫助更多人！
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提交成功提示 -->
+        <div v-if="showSuccessMessage" class="fixed bottom-4 right-4 z-[300] animate-slideInRight" style="animation: slideInRight 0.5s ease-out;">
+            <div class="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center">
+                <i class="fas fa-check-circle text-xl mr-3"></i>
+                <div>
+                    <p class="font-bold">報告已提交！</p>
+                    <p class="text-sm opacity-90">正在打開 GitHub 頁面...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+const { createApp } = Vue;
+const rawData = {
+    "hkedb file": {}, // 特殊項目，點擊跳轉到外部鏈接
+    
+    // 按1-15的順序排列
+    "1. Chinese": {
+        "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "p5.pdf", "per.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p4.pdf", "p5.pdf"] },
+        "2014": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "p5.pdf", "per.pdf"] },
+        "2015": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "p5.pdf", "per.pdf"] },
+        "2016": { "_files": ["ans.pdf", "p1.pdf", "p1.1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "p5.pdf", "per.pdf"] },
+        "2017": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "p5.pdf", "per.pdf"] },
+        "2018": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+        "2019": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+        "2020": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "per.pdf"] },
+        "2022": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "per.pdf"] },
+        "2023": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "per.pdf"] },
+        "2024": { "_files": ["p1.pdf"] },
+        "2024sample": { "_files": ["CHI-Info-Paper2A-2024.pdf", "CHI-MS1-Paper2A-2024.pdf", "CHI-SP-Paper2A-2024.pdf", "CHI-SS-Paper2A-2024.pdf"] },
+        "PP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "p5.pdf"] },
+        "SP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "p5.pdf"] }
+    },
+    
+    "2. English": {
+        "DSE": {
+            "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2014": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2015": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2016": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2017": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2018": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2019": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "2020": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "per.pdf"] },
+            "2021": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "per.pdf"] },
+            "2022": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "per.pdf"] },
+            "2023": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf", "per.pdf"] },
+            "PP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "p3.pdf", "p4.pdf"] }
+        }
+    },
+    
+    "3. Math": {
+        "DSE": {
+            "中文版": {
+                "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2014": { "_files": ["ans.pdf", "p1.pdf"] },
+                "2015": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2016": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2017": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2018": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2019": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2020": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2021": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2022": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2023": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2024": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "PP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "SP": { "_files": ["p1.pdf", "p2.pdf"] }
+            },
+            "英文版": {
+                "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2014": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2015": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2016": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2017": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2018": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2019": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2020": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2021": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2022": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "2023": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "PP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+                "SP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] }
+            }
+        }
+    },
+    
+    "4. ICT": {
+        "2012": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] },
+        "2014": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] },
+        "2015": { "_files": ["p2a.pdf"] },
+        "2016": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] },
+        "2017": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] },
+        "2018": { "_files": ["ans.pdf", "p1.pdf"] },
+        "2019": { "_files": ["p1.pdf", "p2a.pdf"] },
+        "2020": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] },
+        "2021": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] },
+        "2022": { "_files": ["p1.pdf", "p2a.pdf"] },
+        "PP": { "_files": ["ans.pdf", "p1.pdf"] },
+        "SP": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf"] }
+    },
+    
+    "5. BAFS": {
+        "2012": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2014": { "_files": ["p1.pdf", "p2a.pdf", "p2b.pdf"] },
+        "2015": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2016": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2017": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2018": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2019": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2020": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf", "per.pdf"] },
+        "2022": { "_files": ["p1.pdf"] },
+        "2025SP": { "_files": ["p1a.pdf", "p1b.pdf", "p2a.pdf", "p2b.pdf"] },
+        "PP": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf"] },
+        "SP": { "_files": ["ans.pdf", "p1.pdf", "p2a.pdf", "p2b.pdf"] }
+    },
+    
+    "6. econ": {
+        "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2014": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2015": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2016": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2017": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+        "2018": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2019": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2020": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2022": { "_files": ["p1.pdf", "p2.pdf"] },
+        "2023": { "_files": ["p1.pdf", "p2.pdf"] },
+        "PP": { "_files": ["answers.pdf", "p1.pdf", "p2.pdf"] },
+        "SP": { "_files": ["answers.pdf", "p1.pdf", "p2.pdf"] }
+    },
+    
+    "7. Geog": {
+        "2012": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf"] },
+        "2013": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2014": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2015": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2016": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2017": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2018": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2019": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2020": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2022": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf"] },
+        "2023": { "_files": ["ans.pdf", "map.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "PP": { "_files": ["Paper1.pdf", "Paper2.pdf"] },
+        "Sample paper": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] }
+    },
+    
+    "8. hist": {
+        "2012": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf"] },
+        "2013": { "_files": ["Answer.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf"] },
+        "2014": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf", "Sample_2.pdf"] },
+        "2015": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf", "Sample_2.pdf"] },
+        "2016": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf", "Sample_2.pdf"] },
+        "2017": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf", "Sample_2.pdf"] },
+        "2018": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf", "Sample_2.pdf"] },
+        "2019": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf", "Sample_2.pdf"] },
+        "2020": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf", "Sample_1.pdf", "Sample_2.pdf"] },
+        "2021": { "_files": ["Answer.pdf", "Paper_1.pdf", "Paper_2.pdf"] },
+        "PP": { "_files": ["Answer.pdf", "Candidate_Performance.pdf", "Paper_1.pdf", "Paper_2.pdf"] },
+        "SP": { "_files": ["Answer.pdf", "Paper_1.pdf", "Paper_2.pdf"] }
+    },
+    
+    "9. M2": {
+        "2012": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2013": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2014": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2015": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2016": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2017": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2018": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2019": { "_files": ["ans.pdf", "per.pdf", "pp.pdf"] },
+        "2020": { "_files": ["ans.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "pp.pdf"] },
+        "2022": { "_files": ["ans.pdf", "pp.pdf"] },
+        "2023": { "_files": ["pp.pdf"] },
+        "PP": { "_files": ["ans.pdf", "pp.pdf"] },
+        "SP": { "_files": ["pp.pdf"] }
+    },
+    
+    "10. phy": {
+        "2012": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2014": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2015": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2016": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2017": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2018": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2019": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2020": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2022": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] },
+        "2023": { "_files": ["ans.pdf", "p1a.pdf", "p1b.pdf", "p2.pdf", "per.pdf"] }
+    },
+    
+    "11. Chinese History": {
+        "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+        "2014": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2015": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+        "2016": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2017": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2018": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2019": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2020": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "PP": { "_files": ["p1.pdf", "p2.pdf"] },
+        "SP": { "_files": ["p1.pdf", "p2.pdf"] }
+    },
+    
+    "12. Chem": {
+        "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2014": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2015": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2016": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2017": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2018": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2019": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2020": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2021": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2022": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2023": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "PP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+        "SP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] }
+    },
+    
+    "13. HM": {
+        "2012": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2013": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2014": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2015": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2016": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2017": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2018": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2019": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2020": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2021": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2022": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2023": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2024": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "2025": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "PP": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] },
+        "SP": { "_files": ["不是那么HM的都那么惨吗.pdf", "连pastpaper都找不到一点.pdf"] }
+    },
+    
+    "14. CS": {
+        "温CS是真CS": {},
+        "练个蛋的CS啊 哥们": {}
+    },
+    
+    "15. BIO": {
+        "2012": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2013": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] },
+        "2014": { "_files": ["p2.pdf"] },
+        "PP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf"] },
+        "SP": { "_files": ["ans.pdf", "p1.pdf", "p2.pdf", "per.pdf"] }
+    }
+};
+</script>
+        createApp({
+            data() {
+                return {
+                    db: rawData,
+                    breadcrumbs: [],
+                    currentMenu: rawData,
+                    // 反饋表單狀態
+                    showFeedback: false,
+                    showSuccessMessage: false,
+                    feedback: {
+                        subject: '',
+                        year: '',
+                        missingPapers: [],
+                        language: '',
+                        description: '',
+                        contact: ''
+                    },
+                    // 配置：GitHub倉庫信息
+                    githubConfig: {
+                        repo: 'YOUR_USERNAME/YOUR_REPO', // 請修改為你的倉庫
+                        labels: '用戶反饋,缺失試卷'
+                    }
+                }
+            },
+            computed: {
+                canSubmit() {
+                    return this.feedback.subject && this.feedback.year && this.feedback.missingPapers.length > 0;
+                }
+            },
+            methods: {
+                // 修改的enterDir方法
+                enterDir(key) {
+                    // 特殊處理：如果點擊的是 "hkedb file"，則跳轉到外部鏈接
+                    if (key === 'hkedb file') {
+                        window.open('https://findbaicha.github.io/chinese_edb_file', '_blank', 'noopener,noreferrer');
+                        return;
+                    }
+                    
+                    // 正常的文件夾導航邏輯
+                    this.breadcrumbs.push(key);
+                    this.currentMenu = this.currentMenu[key];
+                },
+                
+                jumpTo(index) {
+                    this.breadcrumbs = this.breadcrumbs.slice(0, index + 1);
+                    let temp = this.db;
+                    this.breadcrumbs.forEach(key => { temp = temp[key]; });
+                    this.currentMenu = temp;
+                },
+                goHome() {
+                    this.breadcrumbs = [];
+                    this.currentMenu = this.db;
+                },
+                getFilePath(filename) {
+                    return "./" + this.breadcrumbs.join('/') + "/" + filename;
+                },
+                formatFileName(name) {
+                    return name.replace(/\s*\(\d+\)/g, '').replace(/\s*- 副本/g, '').toUpperCase();
+                },
+                
+                // 打開PDF（在新標籤頁）
+                openPdf(file) {
+                    const filePath = this.getFilePath(file);
+                    window.open(filePath, '_blank', 'noopener,noreferrer');
+                },
+                
+                // 下載PDF
+                downloadPdf(file) {
+                    const filePath = this.getFilePath(file);
+                    const link = document.createElement('a');
+                    link.href = filePath;
+                    link.download = this.formatFileName(file) + '.pdf';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                },
+                
+                // 反饋表單相關方法
+                showFeedbackForm() {
+                    this.showFeedback = true;
+                    document.body.style.overflow = 'hidden';
+                },
+                closeFeedbackForm() {
+                    this.showFeedback = false;
+                    document.body.style.overflow = 'auto';
+                },
+                resetForm() {
+                    this.feedback = {
+                        subject: '',
+                        year: '',
+                        missingPapers: [],
+                        language: '',
+                        description: '',
+                        contact: ''
+                    };
+                },
+                async submitFeedback() {
+                    if (!this.canSubmit) return;
+                    
+                    // 1. 顯示成功消息
+                    this.showSuccessMessage = true;
+                    
+                    // 2. 組織反饋內容為Markdown格式
+                    const issueBody = this.generateIssueBody();
+                    
+                    // 3. 創建GitHub Issues URL
+                    const issueUrl = this.generateGitHubIssueUrl(issueBody);
+                    
+                    // 4. 延遲後打開GitHub頁面
+                    setTimeout(() => {
+                        window.open(issueUrl, '_blank', 'noopener,noreferrer');
+                        
+                        // 5. 關閉表單和消息
+                        setTimeout(() => {
+                            this.showSuccessMessage = false;
+                            this.closeFeedbackForm();
+                            this.resetForm();
+                        }, 2000);
+                    }, 1000);
+                },
+                generateIssueBody() {
+                    return `
+**📋 缺失試卷報告**
+
+| 項目 | 內容 |
+| :--- | :--- |
+| **科目** | ${this.feedback.subject} |
+| **年份** | ${this.feedback.year} |
+| **缺失部分** | ${this.feedback.missingPapers.join(', ')} |
+| **語言版本** | ${this.feedback.language || '未指定'} |
+| **詳細說明** | ${this.feedback.description || '無'} |
+| **聯繫方式** | ${this.feedback.contact || '未提供'} |
+
+**📅 提交信息**
+- 提交時間：${new Date().toLocaleString('zh-Hant')}
+- 提交來源：DSE Resource Hub
+
+---
+*此報告通過 DSE 資源庫反饋系統提交*
+                    `.trim();
+                },
+                generateGitHubIssueUrl(issueBody) {
+                    const issueTitle = `[缺失試卷] ${this.feedback.subject} ${this.feedback.year}`;
+                    const baseUrl = `https://github.com/${this.githubConfig.repo}/issues/new`;
+                    
+                    const params = new URLSearchParams({
+                        'title': issueTitle,
+                        'body': issueBody,
+                        'labels': this.githubConfig.labels
+                    });
+                    
+                    return `${baseUrl}?${params.toString()}`;
+                }
+            },
+            mounted() {
+                // 確保GitHub倉庫配置正確
+                console.log('DSE Resource Hub 已載入');
+                console.log('GitHub Issues 反饋系統已啟用');
+                console.log('請確保已開啟倉庫 Issues 功能: https://github.com/' + this.githubConfig.repo + '/settings');
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
